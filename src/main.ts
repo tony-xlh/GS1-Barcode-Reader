@@ -47,6 +47,7 @@ function buildBarcodeTable(result:TextResult){
   const headRow = document.createElement("tr");
   const keyTitleCell = document.createElement("th");
   keyTitleCell.innerText = "Key";
+  keyTitleCell.style.minWidth = "30vw";
   const valueTitleCell = document.createElement("th");
   valueTitleCell.innerText = "Value";
   headRow.appendChild(keyTitleCell);
