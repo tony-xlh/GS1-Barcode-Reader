@@ -24,9 +24,9 @@ function listResults(results:TextResult[]){
     const result = results[index];
     const resultContainer = document.createElement("div");
     let content = "";
-    content = "Format:" + result.barcodeFormatString + "\n";
-    content = content + "Text:" + result.barcodeText + "\n";
-    content = content + "Bytes:" + result.barcodeBytes;
+    content = "Format: " + result.barcodeFormatString + "\n";
+    content = content + "Text: " + result.barcodeText + "\n";
+    content = content + "Bytes: " + result.barcodeBytes;
     resultContainer.innerText = content;
     resultsContainer.appendChild(resultContainer);
   }
