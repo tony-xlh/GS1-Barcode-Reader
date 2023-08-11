@@ -27,9 +27,43 @@ function listResults(results:TextResult[]){
     content = "Format: " + result.barcodeFormatString + "\n";
     content = content + "Text: " + result.barcodeText + "\n";
     content = content + "Bytes: " + result.barcodeBytes;
+    const codeItems = parseGS1Barcode(result.barcodeBytes);
+    console.log(codeItems);
     resultContainer.innerText = content;
     resultsContainer.appendChild(resultContainer);
   }
+}
+
+function parseGS1Barcode(bytes:number[]){
+  let segments = segmentsSplittedByFNC1(bytes);
+  console.log(segments);
+  let parsedCodeItems:any[] = [];
+  for (let index = 0; index < segments.length; index++) {
+    const segment = segments[index];
+    const parsedResult = parseBarcode(segment);
+    parsedCodeItems = parsedCodeItems.concat(parsedResult["parsedCodeItems"]);
+  }
+  return parsedCodeItems;
+}
+
+function segmentsSplittedByFNC1(bytes:number[]){
+  let content = "";
+  let segments:string[] = [];
+  for (let index = 0; index < bytes.length; index++) {
+    const byte = bytes[index];
+    if (byte === 29) {
+      if (content) {
+        segments.push(content);
+      }
+      content = "";
+    }else{
+      content = content + String.fromCharCode(byte);
+    }
+  }
+  if (content) {
+    segments.push(content);
+  }
+  return segments;
 }
 
 document.getElementById("decodeBtn")?.addEventListener("click",async function(){
