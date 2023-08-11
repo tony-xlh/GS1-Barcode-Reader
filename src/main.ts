@@ -14,6 +14,10 @@ async function init(){
 
 function loadImage(dataURL:string){
   let img = document.getElementById("selectedImg") as HTMLImageElement;
+  img.onload = async function(){
+    let results = await reader.decode(img);
+    listResults(results);
+  }
   img.src = dataURL;
 }
 
@@ -99,10 +103,8 @@ function segmentsSplittedByFNC1(bytes:number[]){
   return segments;
 }
 
-document.getElementById("decodeBtn")?.addEventListener("click",async function(){
-  let img = document.getElementById("selectedImg") as HTMLImageElement;
-  let results = await reader.decode(img);
-  listResults(results);
+document.getElementById("decodeImageBtn")?.addEventListener("click",async function(){
+  document.getElementById("imageFile")?.click();
 });
 
 document.getElementById("imageFile")?.addEventListener("change",function(){
