@@ -22,16 +22,48 @@ function listResults(results:TextResult[]){
   resultsContainer.innerHTML = "";
   for (let index = 0; index < results.length; index++) {
     const result = results[index];
-    const resultContainer = document.createElement("div");
-    let content = "";
-    content = "Format: " + result.barcodeFormatString + "\n";
-    content = content + "Text: " + result.barcodeText + "\n";
-    content = content + "Bytes: " + result.barcodeBytes;
-    const codeItems = parseGS1Barcode(result.barcodeBytes);
-    console.log(codeItems);
-    resultContainer.innerText = content;
-    resultsContainer.appendChild(resultContainer);
+    const title = document.createElement("h2");
+    title.innerText = "Barcode "+(index+1)+":";
+    resultsContainer.appendChild(title);
+    resultsContainer.appendChild(buildBarcodeTable(result));
   }
+}
+
+function buildBarcodeTable(result:TextResult){
+  const table = document.createElement("table");
+  const items:{key:string,value:any}[] = [];
+  items.push({key:"Format",value:result.barcodeFormatString});
+  items.push({key:"Text",value:result.barcodeText});
+  items.push({key:"Bytes",value:result.barcodeBytes});
+  try {
+    const codeItems = parseGS1Barcode(result.barcodeBytes);
+    for (let index = 0; index < codeItems.length; index++) {
+      const item = codeItems[index];
+      items.push({key:item.dataTitle,value:item.data});
+    }
+  } catch (error) {
+    console.log(error);
+  }
+  const headRow = document.createElement("tr");
+  const keyTitleCell = document.createElement("th");
+  keyTitleCell.innerText = "Key";
+  const valueTitleCell = document.createElement("th");
+  valueTitleCell.innerText = "Value";
+  headRow.appendChild(keyTitleCell);
+  headRow.appendChild(valueTitleCell)
+  table.appendChild(headRow);
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    const dataRow = document.createElement("tr");
+    const keyCell = document.createElement("td");
+    keyCell.innerText = item.key;
+    const valueCell = document.createElement("td");
+    valueCell.innerText = item.value;
+    dataRow.appendChild(keyCell);
+    dataRow.appendChild(valueCell);
+    table.appendChild(dataRow);
+  }
+  return table;
 }
 
 function parseGS1Barcode(bytes:number[]){

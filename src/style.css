@@ -1,3 +1,13 @@
 #selectedImg {
   max-width: 300px;
 }
+
+#results table {
+  border-collapse: collapse;
+  border:1px solid black;
+  word-break: break-all;
+}
+
+#results table td, th  {
+  border:1px solid black;
+}
