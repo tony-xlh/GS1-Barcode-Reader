@@ -1,15 +1,25 @@
 import { BarcodeReader, TextResult } from "dynamsoft-javascript-barcode";
+import { CameraEnhancer } from "dynamsoft-camera-enhancer";
 import "./style.css";
 
 BarcodeReader.license = "DLS2eyJoYW5kc2hha2VDb2RlIjoiMjAwMDAxLTE2NDk4Mjk3OTI2MzUiLCJvcmdhbml6YXRpb25JRCI6IjIwMDAwMSIsInNlc3Npb25QYXNzd29yZCI6IndTcGR6Vm05WDJrcEQ5YUoifQ==";
 BarcodeReader.engineResourcePath = "https://cdn.jsdelivr.net/npm/dynamsoft-javascript-barcode@9.6.21/dist/";
-
+CameraEnhancer.engineResourcePath = "https://cdn.jsdelivr.net/npm/dynamsoft-camera-enhancer@3.3.5/dist/";
 let reader:BarcodeReader;
+let enhancer:CameraEnhancer;
+let interval:any;
+let decoding = false;
 let parseBarcode = (window as any)["parseBarcode"];
 init();
 
 async function init(){
   reader = await BarcodeReader.createInstance();
+  enhancer = await CameraEnhancer.createInstance();
+  await enhancer.setUIElement(document.getElementById("scanner") as HTMLDivElement);
+  enhancer.setVideoFit("cover");
+  enhancer.on("played",function(){
+    startDecodingLoop();
+  });
 }
 
 function loadImage(dataURL:string){
@@ -103,8 +113,65 @@ function segmentsSplittedByFNC1(bytes:number[]){
   return segments;
 }
 
+function startScan(){
+  if (!reader || !enhancer) {
+    alert("Please wait for the initialization of Dynamsoft Barcode Reader.");
+    return;
+  }
+  enhancer.open(true);
+}
+
+function stopScan(){
+  stopDecodingLoop();
+  enhancer.close(true);
+}
+
+function startDecodingLoop(){
+  stopDecodingLoop();
+  interval = setInterval(captureAndDecode,50);
+}
+
+function stopDecodingLoop(){
+  clearInterval(interval);
+  decoding = false;
+}
+
+async function captureAndDecode(){
+  if (decoding === true) {
+    return;
+  }
+  if (reader && enhancer) {
+    if (enhancer.isOpen() === false) {
+      return;
+    }
+    decoding = true;
+    let frame = enhancer.getFrame();
+    let results = await reader.decode(frame);  
+    if (results.length > 0) {
+      let img = document.getElementById("selectedImg") as HTMLImageElement;
+      img.onload = function(){};
+      img.src = frame.toCanvas().toDataURL();
+      listResults(results);
+      stopScan();
+    }
+    decoding = false;
+  }
+}
+
 document.getElementById("decodeImageBtn")?.addEventListener("click",async function(){
-  document.getElementById("imageFile")?.click();
+  if (reader) {
+    document.getElementById("imageFile")?.click();
+  }else{
+    alert("Please wait for the initialization of Dynamsoft Barcode Reader.");
+  }
+});
+
+document.getElementById("liveScanBtn")?.addEventListener("click",function(){
+  startScan();
+});
+
+document.getElementById("closeBtn")?.addEventListener("click",function(){
+  stopScan();
 });
 
 document.getElementById("imageFile")?.addEventListener("change",function(){
