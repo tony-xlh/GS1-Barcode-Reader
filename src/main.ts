@@ -5,7 +5,7 @@ BarcodeReader.license = "DLS2eyJoYW5kc2hha2VDb2RlIjoiMjAwMDAxLTE2NDk4Mjk3OTI2MzU
 BarcodeReader.engineResourcePath = "https://cdn.jsdelivr.net/npm/dynamsoft-javascript-barcode@9.6.21/dist/";
 
 let reader:BarcodeReader;
-
+let parseBarcode = (window as any)["parseBarcode"];
 init();
 
 async function init(){
