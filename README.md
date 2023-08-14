@@ -12,6 +12,6 @@ Here are some examples:
 
 ![datamatrix](./sample-images/gs1-datamatrix.jpg)
 
-Demo:
+Demo video:
 
 https://github.com/tony-xlh/GS1-Barcode-Reader/assets/5462205/6fb32532-ee40-44f3-9272-013e0fba7767
