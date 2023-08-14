@@ -53,7 +53,12 @@ function buildBarcodeTable(result:TextResult){
     const codeItems = parseGS1Barcode(result.barcodeBytes);
     for (let index = 0; index < codeItems.length; index++) {
       const item = codeItems[index];
-      items.push({key:item.dataTitle,value:item.data});
+      if (typeof(item.data) === "object" && "getYear" in item.data) {
+        items.push({key:item.dataTitle,value:item.data.toDateString()});
+      }else{
+        items.push({key:item.dataTitle,value:item.data});
+      }
+      
     }
   } catch (error) {
     console.log(error);
