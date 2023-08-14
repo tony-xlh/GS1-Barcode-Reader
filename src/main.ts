@@ -51,7 +51,7 @@ function buildBarcodeTable(result:TextResult){
   items.push({key:"Bytes",value:result.barcodeBytes});
   try {
     let codeItems;
-    codeItems = parseGS1BarcodeFromString(result.barcodeText);
+    codeItems = parseGS1Barcode(result);
     for (let index = 0; index < codeItems.length; index++) {
       const item = codeItems[index];
       if (typeof(item.data) === "object" && "getYear" in item.data) {
@@ -86,11 +86,14 @@ function buildBarcodeTable(result:TextResult){
   return table;
 }
 
-function parseGS1BarcodeFromString(text:string){
+function parseGS1Barcode(result:TextResult){
+  let text = result.barcodeText;
   text = text.replace(/{GS}/g,"|");
   text = text.replace(//g,"|");
   let segments = text.split("|");
-  segments[0] = "01" + segments[0];
+  if (result.barcodeFormatString === "GS1 Composite Code") {
+    segments[0] = "01" + segments[0]; //add application identifier
+  }
   console.log(segments);
   let parsedCodeItems:any[] = [];
   for (let index = 0; index < segments.length; index++) {
