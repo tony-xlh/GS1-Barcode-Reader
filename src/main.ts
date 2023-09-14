@@ -91,7 +91,7 @@ function parseGS1Barcode(result:TextResult){
   text = text.replace(/{GS}/g,"|");
   text = text.replace(//g,"|");
   let segments = text.split("|");
-  if (result.barcodeFormatString === "GS1 Composite Code" || result.barcodeFormatString.indexOf("Omnidirectional") != -1) {
+  if (result.barcodeFormatString === "GS1 Composite Code" || (result.barcodeFormatString.indexOf("GS1 Databar") != -1 &&  result.barcodeFormatString.indexOf("Expanded") == -1)) {
     segments[0] = "01" + segments[0]; //add application identifier
   }
   console.log(segments);
