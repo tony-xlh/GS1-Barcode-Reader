@@ -29,7 +29,14 @@ let interval:any;
 let decoding = false;
 let parseBarcode = (window as any)["parseBarcode"];
 let parser:CodeParser;
+let lastBarcodeResults:BarcodeResultItem[]|null = null;
 init();
+
+document.getElementById("parserSelect")?.addEventListener("change",function(){
+  if (lastBarcodeResults) {
+    listResults(lastBarcodeResults);
+  }
+});
 
 async function init(){
   parser = await CodeParser.createInstance();
@@ -52,6 +59,7 @@ function loadImage(dataURL:string){
 }
 
 async function listResults(results:BarcodeResultItem[]){
+  lastBarcodeResults = results;
   const resultsContainer = document.getElementById("results") as HTMLDivElement;
   resultsContainer.innerHTML = "";
   for (let index = 0; index < results.length; index++) {
@@ -201,7 +209,7 @@ async function captureAndDecode(){
     if (results.length > 0) {
       let img = document.getElementById("selectedImg") as HTMLImageElement;
       img.onload = function(){};
-      img.src = frame.toCanvas().toDataURL();
+      img.src = frame.toCanvas().toDataURL();      
       listResults(results);
       stopScan();
     }
