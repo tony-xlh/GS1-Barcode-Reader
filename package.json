@@ -13,6 +13,6 @@
     "vite": "^4.4.5"
   },
   "dependencies": {
-    "dynamsoft-javascript-barcode": "^9.6.21"
+    "dynamsoft-barcode-reader-bundle": "^11.0.6000"
   }
 }

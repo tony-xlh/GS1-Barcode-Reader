@@ -1,22 +1,39 @@
-import { BarcodeReader, TextResult } from "dynamsoft-javascript-barcode";
-import { CameraEnhancer } from "dynamsoft-camera-enhancer";
+import { BarcodeResultItem, CoreModule } from "dynamsoft-barcode-reader-bundle";
+import { LicenseManager } from "dynamsoft-barcode-reader-bundle";
+import { CameraView, CameraEnhancer } from "dynamsoft-barcode-reader-bundle";
+import { CaptureVisionRouter } from "dynamsoft-barcode-reader-bundle";
 import "./style.css";
+// Configures the paths where the .wasm files and other necessary resources for modules are located.
+CoreModule.engineResourcePaths.rootDirectory = "https://cdn.jsdelivr.net/npm/";
 
-BarcodeReader.license = "DLS2eyJoYW5kc2hha2VDb2RlIjoiMjAwMDAxLTE2NDk4Mjk3OTI2MzUiLCJvcmdhbml6YXRpb25JRCI6IjIwMDAwMSIsInNlc3Npb25QYXNzd29yZCI6IndTcGR6Vm05WDJrcEQ5YUoifQ==";
-BarcodeReader.engineResourcePath = "https://cdn.jsdelivr.net/npm/dynamsoft-javascript-barcode@9.6.21/dist/";
-CameraEnhancer.engineResourcePath = "https://cdn.jsdelivr.net/npm/dynamsoft-camera-enhancer@3.3.5/dist/";
-let reader:BarcodeReader;
-let enhancer:CameraEnhancer;
+/** LICENSE ALERT - README
+ * To use the library, you need to first specify a license key using the API "initLicense()" as shown below.
+ */
+
+LicenseManager.initLicense("DLS2eyJvcmdhbml6YXRpb25JRCI6IjIwMDAwMSJ9");
+
+/**
+ * You can visit https://www.dynamsoft.com/customer/license/trialLicense?utm_source=samples&product=dbr&package=js to get your own trial license good for 30 days.
+ * Note that if you downloaded this sample from Dynamsoft while logged in, the above license key may already be your own 30-day trial license.
+ * For more information, see https://www.dynamsoft.com/barcode-reader/docs/web/programming/javascript/user-guide/index.html?ver=10.4.2001&cVer=true#specify-the-license&utm_source=samples or contact support@dynamsoft.com.
+ * LICENSE ALERT - THE END
+ */
+
+// Optional. Used to load wasm resources in advance, reducing latency between video playing and barcode decoding.
+CoreModule.loadWasm();
+// Defined globally for easy debugging.
+let enhancer: CameraEnhancer;
+let cvRouter: CaptureVisionRouter;
 let interval:any;
 let decoding = false;
 let parseBarcode = (window as any)["parseBarcode"];
 init();
 
 async function init(){
-  reader = await BarcodeReader.createInstance();
-  enhancer = await CameraEnhancer.createInstance();
-  await enhancer.setUIElement(document.getElementById("scanner") as HTMLDivElement);
-  enhancer.setVideoFit("cover");
+  cvRouter = await CaptureVisionRouter.createInstance();
+  const cameraView = await CameraView.createInstance();
+  enhancer = await CameraEnhancer.createInstance(cameraView);
+  cameraView.setUIElement(document.getElementById("scanner") as HTMLDivElement);
   enhancer.on("played",function(){
     startDecodingLoop();
   });
@@ -25,13 +42,13 @@ async function init(){
 function loadImage(dataURL:string){
   let img = document.getElementById("selectedImg") as HTMLImageElement;
   img.onload = async function(){
-    let results = await reader.decode(img);
-    listResults(results);
+    let result = await cvRouter.capture(img,"ReadBarcodes_SpeedFirst");
+    listResults(result.decodedBarcodesResult?.barcodeResultItems ?? []);
   }
   img.src = dataURL;
 }
 
-function listResults(results:TextResult[]){
+function listResults(results:BarcodeResultItem[]){
   const resultsContainer = document.getElementById("results") as HTMLDivElement;
   resultsContainer.innerHTML = "";
   for (let index = 0; index < results.length; index++) {
@@ -43,12 +60,12 @@ function listResults(results:TextResult[]){
   }
 }
 
-function buildBarcodeTable(result:TextResult){
+function buildBarcodeTable(result:BarcodeResultItem){
   const table = document.createElement("table");
   const items:{key:string,value:any}[] = [];
-  items.push({key:"Format",value:result.barcodeFormatString});
-  items.push({key:"Text",value:result.barcodeText});
-  items.push({key:"Bytes",value:result.barcodeBytes});
+  items.push({key:"Format",value:result.formatString});
+  items.push({key:"Text",value:result.text});
+  items.push({key:"Bytes",value:result.bytes});
   try {
     let codeItems;
     codeItems = parseGS1Barcode(result);
@@ -86,12 +103,12 @@ function buildBarcodeTable(result:TextResult){
   return table;
 }
 
-function parseGS1Barcode(result:TextResult){
-  let text = result.barcodeText;
+function parseGS1Barcode(result:BarcodeResultItem){
+  let text = result.text;
   text = text.replace(/{GS}/g,"|");
   text = text.replace(//g,"|");
   let segments = text.split("|");
-  if (result.barcodeFormatString === "GS1 Composite Code" || (result.barcodeFormatString.indexOf("GS1 Databar") != -1 &&  result.barcodeFormatString.indexOf("Expanded") == -1)) {
+  if (result.formatString === "GS1 Composite Code" || (result.formatString.indexOf("GS1 Databar") != -1 &&  result.formatString.indexOf("Expanded") == -1)) {
     segments[0] = "01" + segments[0]; //add application identifier
   }
   console.log(segments);
@@ -105,16 +122,16 @@ function parseGS1Barcode(result:TextResult){
 }
 
 function startScan(){
-  if (!reader || !enhancer) {
+  if (!cvRouter || !enhancer) {
     alert("Please wait for the initialization of Dynamsoft Barcode Reader.");
     return;
   }
-  enhancer.open(true);
+  enhancer.open();
 }
 
 function stopScan(){
   stopDecodingLoop();
-  enhancer.close(true);
+  enhancer.close();
 }
 
 function startDecodingLoop(){
@@ -131,13 +148,14 @@ async function captureAndDecode(){
   if (decoding === true) {
     return;
   }
-  if (reader && enhancer) {
+  if (cvRouter && enhancer) {
     if (enhancer.isOpen() === false) {
       return;
     }
     decoding = true;
-    let frame = enhancer.getFrame();
-    let results = await reader.decode(frame);  
+    let frame = enhancer.fetchImage();
+    let result = await cvRouter.capture(frame,"ReadBarcodes_SpeedFirst");  
+    let results = result.decodedBarcodesResult?.barcodeResultItems ?? [];
     if (results.length > 0) {
       let img = document.getElementById("selectedImg") as HTMLImageElement;
       img.onload = function(){};
@@ -150,7 +168,7 @@ async function captureAndDecode(){
 }
 
 document.getElementById("decodeImageBtn")?.addEventListener("click",async function(){
-  if (reader) {
+  if (cvRouter) {
     document.getElementById("imageFile")?.click();
   }else{
     alert("Please wait for the initialization of Dynamsoft Barcode Reader.");
