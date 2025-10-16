@@ -44,7 +44,9 @@ async function init(){
   cvRouter = await CaptureVisionRouter.createInstance();
   const cameraView = await CameraView.createInstance();
   enhancer = await CameraEnhancer.createInstance(cameraView);
-  cameraView.setUIElement(document.getElementById("scanner") as HTMLDivElement);
+
+  document.querySelector("#scanner")!.append(cameraView.getUIElement());
+
   enhancer.on("played",function(){
     startDecodingLoop();
   });
@@ -179,11 +181,13 @@ function startScan(){
     return;
   }
   enhancer.open();
+  document.getElementById("scanner")!.style.display = "block";
 }
 
 function stopScan(){
   stopDecodingLoop();
   enhancer.close();
+  document.getElementById("scanner")!.style.display = "none";
 }
 
 function startDecodingLoop(){
