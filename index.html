@@ -13,6 +13,13 @@
         <button id="decodeImageBtn">Decode an image</button>
         <input type="file" id="imageFile" style="display:none;"/>
         <button id="liveScanBtn">Start live scanning</button>
+        <label>Parser:
+          <select id="parserSelect">
+            <option value="dcp">Dynamsoft Code Parser</option>
+            <option value="gs1">gs1-barcode-parser</option>
+          </select>
+        </label>
+        
       </div>
       <div>
         <img id="selectedImg"/>

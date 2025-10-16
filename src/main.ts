@@ -1,4 +1,4 @@
-import { BarcodeResultItem, CoreModule } from "dynamsoft-barcode-reader-bundle";
+import { BarcodeResultItem, CodeParser, CodeParserModule, CoreModule } from "dynamsoft-barcode-reader-bundle";
 import { LicenseManager } from "dynamsoft-barcode-reader-bundle";
 import { CameraView, CameraEnhancer } from "dynamsoft-barcode-reader-bundle";
 import { CaptureVisionRouter } from "dynamsoft-barcode-reader-bundle";
@@ -22,14 +22,17 @@ LicenseManager.initLicense("DLS2eyJvcmdhbml6YXRpb25JRCI6IjIwMDAwMSJ9");
 // Optional. Used to load wasm resources in advance, reducing latency between video playing and barcode decoding.
 CoreModule.loadWasm();
 // Defined globally for easy debugging.
+CodeParserModule.loadSpec("GS1_AI");
 let enhancer: CameraEnhancer;
 let cvRouter: CaptureVisionRouter;
 let interval:any;
 let decoding = false;
 let parseBarcode = (window as any)["parseBarcode"];
+let parser:CodeParser;
 init();
 
 async function init(){
+  parser = await CodeParser.createInstance();
   cvRouter = await CaptureVisionRouter.createInstance();
   const cameraView = await CameraView.createInstance();
   enhancer = await CameraEnhancer.createInstance(cameraView);
@@ -48,7 +51,7 @@ function loadImage(dataURL:string){
   img.src = dataURL;
 }
 
-function listResults(results:BarcodeResultItem[]){
+async function listResults(results:BarcodeResultItem[]){
   const resultsContainer = document.getElementById("results") as HTMLDivElement;
   resultsContainer.innerHTML = "";
   for (let index = 0; index < results.length; index++) {
@@ -56,11 +59,12 @@ function listResults(results:BarcodeResultItem[]){
     const title = document.createElement("h2");
     title.innerText = "Barcode "+(index+1)+":";
     resultsContainer.appendChild(title);
-    resultsContainer.appendChild(buildBarcodeTable(result));
+    const table = await buildBarcodeTable(result);
+    resultsContainer.appendChild(table);
   }
 }
 
-function buildBarcodeTable(result:BarcodeResultItem){
+async function buildBarcodeTable(result:BarcodeResultItem){
   const table = document.createElement("table");
   const items:{key:string,value:any}[] = [];
   items.push({key:"Format",value:result.formatString});
@@ -68,7 +72,7 @@ function buildBarcodeTable(result:BarcodeResultItem){
   items.push({key:"Bytes",value:result.bytes});
   try {
     let codeItems;
-    codeItems = parseGS1Barcode(result);
+    codeItems = await parseGS1Barcode(result);
     for (let index = 0; index < codeItems.length; index++) {
       const item = codeItems[index];
       if (typeof(item.data) === "object" && "getYear" in item.data) {
@@ -104,6 +108,44 @@ function buildBarcodeTable(result:BarcodeResultItem){
 }
 
 function parseGS1Barcode(result:BarcodeResultItem){
+  let selectedEngine = (document.getElementById("parserSelect") as HTMLSelectElement).value;
+  if (selectedEngine === "dcp") {
+    return parseWithDCP(result);
+  }else{
+    return parseWithThirdParty(result);
+  }
+}
+
+async function parseWithDCP(result:BarcodeResultItem){
+  let text = result.text;
+  let parsedItem = await parser.parse(text);
+  const data = JSON.parse(parsedItem.jsonString);
+  const items:any[] = [];
+
+  if (data.ResultInfo) {
+      (data.ResultInfo as any[]).forEach(item => {
+          let ai = item.FieldName || "";
+          let description = "";
+          let value = "";
+
+          const childFields = item.ChildFields?.[0] || [];
+          (childFields as any[]).forEach(field => {
+              if (field.FieldName.endsWith("AI")) {
+                  ai = field.RawValue || ai;
+                  description = field.Value || "";
+              } else if (field.FieldName.endsWith("Data")) {
+                  value = field.Value || "";
+              }
+              console.log(field);
+          });
+          
+          items.push({dataTitle:description,data:value});
+      });
+  }
+  return items;
+}
+
+async function parseWithThirdParty(result:BarcodeResultItem){
   let text = result.text;
   text = text.replace(/{GS}/g,"|");
   text = text.replace(//g,"|");
