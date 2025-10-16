@@ -39,6 +39,7 @@ document.getElementById("parserSelect")?.addEventListener("change",function(){
 });
 
 async function init(){
+  document.getElementById("status")!.innerText = "Loading...";
   parser = await CodeParser.createInstance();
   cvRouter = await CaptureVisionRouter.createInstance();
   const cameraView = await CameraView.createInstance();
@@ -47,6 +48,7 @@ async function init(){
   enhancer.on("played",function(){
     startDecodingLoop();
   });
+  document.getElementById("status")!.innerText = "Ready.";
 }
 
 function loadImage(dataURL:string){
