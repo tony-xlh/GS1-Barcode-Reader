@@ -110,7 +110,7 @@ identifiers matching.
 
 ## Blog
 
-[Scan and Parse GS1 Barcodes with Application Identifiers in JavaScript](https://www.dynamsoft.com/codepool/scan-and-parse-gs1-barcode.html)
+[GS1 Barcode Scanner Online – Parse GTIN, Lot, Expiry & Serial](https://www.dynamsoft.com/codepool/scan-and-parse-gs1-barcode.html)
 
 ## Licensing
 
