@@ -263,6 +263,12 @@ async function initSDK() {
 
     showLoading('Starting the camera…');
     cameraView = await Dynamsoft.DCE.CameraView.createInstance();
+    /* DCE defaults to object-fit "contain", which letterboxes a portrait
+       camera stream inside a wide-short viewfinder (a phone held upright
+       shows a narrow pillar with black bars). "cover" fills the viewfinder
+       and crops the overflow instead; decoding still uses the full frames,
+       so this changes only the picture, never what the reader sees. */
+    if (typeof cameraView.setVideoFit === 'function') cameraView.setVideoFit('cover');
     cameraEnhancer = await Dynamsoft.DCE.CameraEnhancer.createInstance(cameraView);
     cvRouter = await Dynamsoft.CVR.CaptureVisionRouter.createInstance();
 
@@ -514,6 +520,22 @@ function barcodeItemsFrom(result) {
    GS1 parsing
    --------------------------------------------------------------------------- */
 
+/* The decoder reports where each symbol sits as a quad of points in the
+   captured image's pixel coordinates. Copied into plain objects so nothing
+   downstream depends on the SDK's own class instances surviving. */
+function locationPoints(item) {
+    var points = item.location && item.location.points;
+    if (!points || !points.length) return null;
+
+    var list = [];
+    for (var i = 0; i < points.length; i++) {
+        var point = points[i];
+        if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') return null;
+        list.push({ x: point.x, y: point.y });
+    }
+    return list.length >= 3 ? list : null;
+}
+
 /* Dynamsoft Code Parser with the GS1_AI spec loaded turns the element string
    into AI / description / value triples. It gets two attempts: the raw text as
    the decoder returned it, and the AI-normalised string from gs1.js — which is
@@ -658,6 +680,7 @@ async function analyzeItem(item) {
     return {
         format: format,
         text: rawText,
+        location: locationPoints(item),
         bytes: item.bytes || null,
         confidence: typeof item.confidence === 'number' ? item.confidence : null,
         elements: mergeFields(gs1Result.elements, parsedFields),
@@ -683,6 +706,54 @@ function node(tag, className, text) {
     return element;
 }
 
+/* Industry parsing hints (GS1 presets). A GS1 payload whose elements read
+   DI + a date (production or expiry) + a lot or serial follows the GS1 UDI
+   structure — the medical-device set a quality system traces. The tag names
+   the vertical; the note maps the AIs to the UDI fields. */
+function isUdiPayload(elements) {
+    var ais = {};
+    elements.forEach(function (row) { ais[row.ai] = true; });
+    return !!ais['01'] && (!!ais['11'] || !!ais['17']) && (!!ais['10'] || !!ais['21']);
+}
+
+/* When one image carries the same GTIN in several symbols — the Sunrise 2027
+   packaging pattern, a 2D symbol beside the legacy EAN/UPC — say so, because
+   the duplicate line is the point: a retail system deduplicates the reads into
+   one product, and a naive results list would look wrong doing the same. */
+function gtinDeduplication(analyses) {
+    var byGtin = {};
+    analyses.forEach(function (analysis) {
+        if (!analysis.gtin || !analysis.gtin.value) return;
+        var key = analysis.gtin.value;
+        if (!byGtin[key]) byGtin[key] = [];
+        byGtin[key].push(analysis.format);
+    });
+
+    var duplicated = Object.keys(byGtin).filter(function (key) {
+        return byGtin[key].length > 1;
+    });
+    if (!duplicated.length) return null;
+
+    var box = node('div', 'dedup-note');
+    duplicated.forEach(function (key) {
+        box.appendChild(node('p', 'dedup-line',
+            'GTIN ' + key + ' was read from ' + byGtin[key].length + ' symbols ('
+            + unique(byGtin[key]).join(', ') + '). One product, one scan: a retail '
+            + 'system deduplicates these into a single GTIN — the Sunrise 2027 pattern of '
+            + 'a 2D symbol beside the legacy EAN/UPC.'));
+    });
+    return box;
+}
+
+function unique(list) {
+    var seen = {};
+    return list.filter(function (item) {
+        if (seen[item]) return false;
+        seen[item] = true;
+        return true;
+    });
+}
+
 async function showResults(items, source, outcome) {
     resultsOpen = true;
     els.resultsContent.replaceChildren();
@@ -693,23 +764,46 @@ async function showResults(items, source, outcome) {
     }
     lastPayload = analyses;
 
+    var overlay = { el: null, markers: [] };
     if (outcome && outcome.src) {
         var preview = node('figure', 'source-preview');
+        var stage = node('div', 'preview-stage');
         var previewImg = document.createElement('img');
         previewImg.src = outcome.src;
         previewImg.alt = 'The image that was scanned';
-        preview.appendChild(previewImg);
-        preview.appendChild(node('figcaption', null,
-            outcome.label + ' — ' + outcome.width + ' × ' + outcome.height + ' px'));
+        stage.appendChild(previewImg);
+
+        overlay = buildOverlay(analyses, outcome);
+        stage.appendChild(overlay.el);
+        preview.appendChild(stage);
+
+        var caption = outcome.label + ' — ' + outcome.width + ' × ' + outcome.height + ' px';
+        if (overlay.markers.length && analyses.length > 1) {
+            caption += ' · the numbered markers match the results below';
+        }
+        preview.appendChild(node('figcaption', null, caption));
         els.resultsContent.appendChild(preview);
     }
+
+    var dedup = gtinDeduplication(analyses);
+    if (dedup) els.resultsContent.appendChild(dedup);
 
     els.resultsTitle.textContent = analyses.length === 1
         ? '1 barcode found'
         : analyses.length + ' barcodes found';
 
-    analyses.forEach(function (analysis, index) {
-        els.resultsContent.appendChild(buildBarcodeCard(analysis, index, analyses.length));
+    var cards = analyses.map(function (analysis, index) {
+        return buildBarcodeCard(analysis, index, analyses.length);
+    });
+    cards.forEach(function (card) {
+        els.resultsContent.appendChild(card);
+    });
+
+    /* Marker in the image ↔ card in the list: hovering one lights up the
+       other, tapping a marker scrolls its card into view. Sparse on purpose —
+       a symbol without a reported location keeps its slot empty. */
+    overlay.markers.forEach(function (marker, index) {
+        if (marker && cards[index]) linkMarkerToCard(marker, cards[index], index, analyses.length);
     });
 
     els.results.classList.add('is-open');
@@ -720,6 +814,99 @@ async function showResults(items, source, outcome) {
         gs1_symbols: analyses.filter(function (a) { return a.elements.length; }).length,
         format: analyses[0].format
     });
+}
+
+/* Position markers over the scanned image, one per decoded symbol, so the
+   numbered cards below can be matched to the symbols in the picture.
+   Coordinates are percentages, not pixels: the preview shows the original
+   file while the decode ran on the (possibly downscaled) copy, and the two
+   share the aspect ratio — a point's share of the decoded width is its share
+   of the displayed image. Only a multi-symbol scan gets number chips; a lone
+   symbol still gets its outline but no "#1" that matches no card header. */
+function buildOverlay(analyses, outcome) {
+    var layer = node('div', 'preview-overlay');
+    var markers = [];
+    if (!(outcome.width > 0 && outcome.height > 0)) return { el: layer, markers: markers };
+
+    var numbered = analyses.length > 1;
+
+    analyses.forEach(function (analysis, index) {
+        var points = analysis.location;
+        if (!points) return;
+
+        var xs = points.map(function (p) { return p.x; });
+        var ys = points.map(function (p) { return p.y; });
+        var minX = Math.min.apply(null, xs);
+        var minY = Math.min.apply(null, ys);
+        var boxW = Math.max.apply(null, xs) - minX;
+        var boxH = Math.max.apply(null, ys) - minY;
+        if (!(boxW > 0) || !(boxH > 0)) return;
+
+        var marker = document.createElement('button');
+        marker.type = 'button';
+        marker.className = 'preview-marker';
+        marker.style.left = (minX / outcome.width * 100) + '%';
+        marker.style.top = (minY / outcome.height * 100) + '%';
+        marker.style.width = (boxW / outcome.width * 100) + '%';
+        marker.style.height = (boxH / outcome.height * 100) + '%';
+
+        /* The quad itself, stretched over the bounding box. The non-uniform
+           scale would smear a plain stroke, so the polygon keeps its width in
+           screen pixels instead of user units. */
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 100 100');
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.setAttribute('aria-hidden', 'true');
+        var polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        polygon.setAttribute('points', points.map(function (p) {
+            return ((p.x - minX) / boxW * 100) + ',' + ((p.y - minY) / boxH * 100);
+        }).join(' '));
+        polygon.setAttribute('vector-effect', 'non-scaling-stroke');
+        svg.appendChild(polygon);
+        marker.appendChild(svg);
+
+        if (numbered) {
+            var anchor = points[0];
+            var chip = node('span', 'preview-marker-tag', '#' + (index + 1));
+            chip.style.left = ((anchor.x - minX) / boxW * 100) + '%';
+            chip.style.top = ((anchor.y - minY) / boxH * 100) + '%';
+            /* A symbol whose anchor sits at the very top edge would push its
+               chip outside the image; flip it below the anchor instead. */
+            if (anchor.y / outcome.height * 100 < 6) chip.classList.add('is-below');
+            marker.appendChild(chip);
+            marker.setAttribute('aria-label', 'Result #' + (index + 1) + ' of ' + analyses.length
+                + ' — ' + analysis.format + '. Show its details below.');
+            marker.title = '#' + (index + 1) + ' ' + analysis.format;
+        } else {
+            marker.setAttribute('aria-label', 'Where the ' + analysis.format
+                + ' symbol was found in the image');
+            marker.title = analysis.format;
+        }
+
+        layer.appendChild(marker);
+        markers[index] = marker;
+    });
+
+    return { el: layer, markers: markers };
+}
+
+function linkMarkerToCard(marker, card, index, total) {
+    function highlight(on) {
+        marker.classList.toggle('is-active', on);
+        card.classList.toggle('is-active', on);
+    }
+
+    marker.addEventListener('mouseenter', function () { highlight(true); });
+    marker.addEventListener('mouseleave', function () { highlight(false); });
+    marker.addEventListener('focus', function () { highlight(true); });
+    marker.addEventListener('blur', function () { highlight(false); });
+    marker.addEventListener('click', function () {
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        analytics.action('preview_marker_click', { index: index + 1, total: total });
+    });
+
+    card.addEventListener('mouseenter', function () { highlight(true); });
+    card.addEventListener('mouseleave', function () { highlight(false); });
 }
 
 function buildBarcodeCard(analysis, index, total) {
@@ -733,6 +920,9 @@ function buildBarcodeCard(analysis, index, total) {
     var isGs1 = analysis.elements.length > 0;
     header.appendChild(node('span', isGs1 ? 'gs1-badge' : 'gs1-badge is-plain',
         isGs1 ? 'GS1 element string' : 'No GS1 data elements'));
+    if (isGs1 && isUdiPayload(analysis.elements)) {
+        header.appendChild(node('span', 'gs1-badge', 'GS1 UDI'));
+    }
     if (analysis.confidence != null) {
         header.appendChild(node('span', 'mm-confidence', analysis.confidence + '% confidence'));
     }
@@ -779,6 +969,11 @@ function buildBarcodeCard(analysis, index, total) {
     analysis.elements.forEach(function (row) {
         if (row.note) notes.push('AI ' + row.ai + ': ' + row.note);
     });
+    if (isGs1 && isUdiPayload(analysis.elements)) {
+        notes.push('GS1 UDI structure: the Device Identifier (DI) is AI 01, and the lot (10), '
+            + 'production date (11), expiry (17) and serial (21) are the production identifiers '
+            + 'a healthcare quality system traces against it.');
+    }
     if (notes.length) card.appendChild(noteList(notes, 'warn'));
 
     /* --- facts ----------------------------------------------------------- */

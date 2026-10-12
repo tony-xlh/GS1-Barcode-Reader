@@ -618,6 +618,27 @@ body {
     border-color: var(--dy-gray-300);
 }
 
+/* The GTIN deduplication notice: one product read from several symbols —
+   the Sunrise 2027 packaging pattern. Sits above the per-barcode cards. */
+.dedup-note {
+    margin: 0 0 1rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.83rem;
+    line-height: 1.55;
+    color: var(--dy-gray-900);
+    background: #fff6ea;
+    border: 1px solid #f6d3a3;
+}
+
+.dedup-note .dedup-line {
+    margin: 0;
+}
+
+.dedup-note .dedup-line + .dedup-line {
+    margin-top: 0.35rem;
+}
+
 .mm-confidence {
     margin-left: auto;
     font-size: 0.78rem;
@@ -862,6 +883,105 @@ body {
     margin-top: 0.4rem;
     font-size: 0.78rem;
     color: var(--dy-gray-700);
+}
+
+/* ---------------------------------------------------------------------------
+   Where each symbol was found — markers over the scanned image
+
+   The results panel lists every decoded symbol, but with several symbols in
+   one image the text alone never says which line came from which code. Each
+   symbol's reported quad is outlined in place and numbered to match its card:
+   hover either side and the pair lights up, tap a marker to jump to its card.
+   Orange is the annotation accent here, the same role it plays in the header.
+   --------------------------------------------------------------------------- */
+
+.preview-stage {
+    position: relative;
+    display: inline-block;
+    line-height: 0;
+    max-width: 100%;
+}
+
+.preview-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.preview-marker {
+    position: absolute;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.preview-marker:focus-visible {
+    outline: 2px solid var(--dy-orange);
+    outline-offset: 2px;
+}
+
+.preview-marker svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    /* The quad runs to the edge of its box, so half the stroke would be
+       clipped without this. */
+    overflow: visible;
+}
+
+.preview-marker polygon {
+    fill: rgba(254, 142, 20, 0.14);
+    stroke: #fe8e14;
+    stroke-width: 2;
+    stroke-linejoin: round;
+    transition: fill 0.15s ease;
+}
+
+.preview-marker-tag {
+    position: absolute;
+    transform: translate(-50%, calc(-100% - 5px));
+    padding: 1px 6px 2px;
+    border-radius: 4px;
+    background: #fe8e14;
+    color: var(--white);
+    font-family: var(--font-heading);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    line-height: 1.5;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.preview-marker-tag.is-below {
+    transform: translate(-50%, 5px);
+}
+
+/* The pair lights up together: marker in the image, card in the list. */
+.preview-marker:hover polygon,
+.preview-marker:focus-visible polygon,
+.preview-marker.is-active polygon {
+    fill: rgba(254, 142, 20, 0.32);
+    stroke-width: 3;
+}
+
+.preview-marker:hover .preview-marker-tag,
+.preview-marker:focus-visible .preview-marker-tag,
+.preview-marker.is-active .preview-marker-tag {
+    background: var(--dy-orange-hover);
+}
+
+.barcode-card {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.barcode-card.is-active {
+    border-color: #fe8e14;
+    box-shadow: 0 0 0 1px #fe8e14;
 }
 
 /* ---------------------------------------------------------------------------
